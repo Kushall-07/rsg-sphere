@@ -80,14 +80,27 @@ def apply_theme():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
-        .stApp {
-            background-color: #0F172A;
-            background-image: 
-                radial-gradient(at 40% 20%, hsla(228,100%,74%,0.15) 0px, transparent 50%),
-                radial-gradient(at 80% 0%, hsla(189,100%,56%,0.15) 0px, transparent 50%),
-                radial-gradient(at 0% 50%, hsla(355,100%,93%,0.05) 0px, transparent 50%);
-            color: #F8FAFC;
+        :root {
+            --bg-primary: #1A1A1A;
+            --bg-secondary: #242424;
+            --bg-card: #2D2D2D;
+            --accent: #D79922;
+            --accent-hover: #C28A1E;
+            --accent-muted: #9B6E18;
+            --border: #3D3D3D;
+            --border-accent: #D79922;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --text-muted: #666666;
+            --shadow: rgba(215, 153, 34, 0.3);
+            --glow: rgba(215, 153, 34, 0.15);
+        }
+
+        body, .main, .block-container, .stApp {
+            background-color: var(--bg-primary) !important;
+            color: var(--text-primary) !important;
             font-family: 'Inter', sans-serif;
+            background-image: none !important;
         }
         
         /* Headers & Text */
@@ -97,67 +110,67 @@ def apply_theme():
         
         /* Chat bubbles */
         .chat-user {
-            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            background: var(--accent);
             padding: 16px 20px;
             border-radius: 20px 20px 0 20px;
             margin: 12px 0 12px 20%;
-            box-shadow: 0 4px 15px -3px rgba(37, 99, 235, 0.3);
             font-size: 15px;
             line-height: 1.5;
-            color: white;
+            color: var(--bg-primary);
+            font-weight: 500;
         }
         .chat-bot {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             padding: 20px;
             border-radius: 20px 20px 20px 0;
             margin: 12px 20% 12px 0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             font-size: 15px;
             line-height: 1.6;
-            color: #E2E8F0;
+            color: var(--text-primary);
         }
         
         /* Buttons */
         .stButton > button {
             border-radius: 12px !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            background: rgba(30, 41, 59, 0.5) !important;
-            color: white !important;
+            border: 1px solid var(--border) !important;
+            background: var(--accent) !important;
+            color: var(--bg-primary) !important;
             transition: all 0.3s ease !important;
             padding: 8px 16px !important;
-            font-weight: 500 !important;
+            font-weight: 600 !important;
+            box-shadow: 0 4px 15px var(--shadow) !important;
         }
         .stButton > button:hover {
-            background: rgba(59, 130, 246, 0.8) !important;
-            border-color: #3B82F6 !important;
+            background: var(--accent-hover) !important;
+            border-color: var(--accent) !important;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
         
         /* Inputs */
         .stTextInput > div > div > input {
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 14px;
-            color: white;
+            color: var(--text-primary);
             transition: border-color 0.3s ease;
         }
         .stTextInput > div > div > input:focus {
-            border-color: #3B82F6;
-            box-shadow: 0 0 0 1px #3B82F6;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--glow);
+        }
+        .stTextInput > div > div > input::placeholder {
+            color: var(--text-muted) !important;
         }
         
         /* Tab Container */
         .stTabs [data-baseweb="tab-list"] {
             gap: 8px;
-            background: rgba(15, 23, 42, 0.8);
+            background: var(--bg-secondary);
             padding: 6px;
             border-radius: 16px;
-            border: 1px solid rgba(51, 65, 85, 0.5);
-            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
             width: fit-content;
         }
 
@@ -168,7 +181,7 @@ def apply_theme():
             border-radius: 12px;
             border: 1px solid transparent;
             background: transparent;
-            color: #64748B;
+            color: var(--text-secondary);
             font-family: 'Inter', sans-serif;
             font-size: 14px;
             font-weight: 500;
@@ -179,23 +192,21 @@ def apply_theme():
 
         /* Tab Hover */
         .stTabs [data-baseweb="tab"]:hover {
-            background: rgba(37, 99, 235, 0.1);
-            color: #93C5FD;
-            border-color: rgba(37, 99, 235, 0.2);
+            background: rgba(215, 153, 34, 0.1);
+            color: var(--accent);
+            border-color: rgba(215, 153, 34, 0.3);
         }
 
         /* Active Tab */
         .stTabs [data-baseweb="tab"][aria-selected="true"] {
             background: linear-gradient(
                 135deg, 
-                #2563EB 0%, 
-                #7C3AED 100%
+                var(--accent) 0%, 
+                var(--accent-muted) 100%
             );
-            color: #FFFFFF !important;
+            color: var(--bg-primary) !important;
             border-color: transparent;
-            box-shadow: 
-                0 4px 15px rgba(37, 99, 235, 0.4),
-                0 2px 4px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 15px rgba(215, 153, 34, 0.4);
             font-weight: 600;
         }
 
@@ -211,8 +222,8 @@ def apply_theme():
         
         /* Sidebar */
         [data-testid="stSidebar"] {
-            background-color: rgba(15, 23, 42, 0.95);
-            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border);
         }
         
         /* Badges */
@@ -230,30 +241,55 @@ def apply_theme():
         
         /* Cards */
         .feature-card {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 24px;
             text-align: center;
             transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
             margin-bottom: 20px;
         }
         .feature-card:hover {
             transform: translateY(-5px);
-            border-color: rgba(59, 130, 246, 0.5);
-            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.2);
+            border-color: var(--accent);
+            box-shadow: 0 10px 25px -5px var(--glow);
         }
         .feature-icon {
             font-size: 32px;
             margin-bottom: 12px;
             display: block;
+            color: var(--accent);
         }
         .feature-title {
             font-weight: 600;
             font-size: 18px;
             margin-bottom: 8px;
-            color: #F8FAFC;
+            color: var(--text-primary);
+        }
+        
+        /* Custom Radio Buttons / Quick Questions */
+        .stRadio > div[role="radiogroup"] > label {
+            background: rgba(215, 153, 34, 0.1);
+            border: 1px solid rgba(215, 153, 34, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.2s ease;
+            color: var(--accent);
+        }
+        .stRadio > div[role="radiogroup"] > label:hover {
+            background: rgba(215, 153, 34, 0.2);
+            border-color: var(--accent);
+        }
+        
+        /* Progress bars / Elements */
+        .stProgress > div > div > div > div {
+            background-color: var(--accent);
+        }
+        
+        /* Expanders */
+        .st-emotion-cache-1z1mbg4 {
+            background: var(--bg-card) !important;
+            border: 1px solid var(--border) !important;
         }
         </style>
         """,
@@ -318,8 +354,14 @@ def render_sidebar():
     """Render sidebar upload controls and session stats."""
     st.sidebar.title("📚 RSGSphere")
     st.sidebar.caption("Study Smart. Not Hard.")
+    st.sidebar.info("💡 Upload your college PDFs here to chat with them in Smart Chat")
     uploaded = st.sidebar.file_uploader(
-        "Upload Notes / Syllabus / Textbook", type=["pdf"], accept_multiple_files=True
+        "📚 Upload Study Material",
+        type=["pdf"],
+        accept_multiple_files=True,
+    )
+    st.sidebar.caption(
+        "For Smart Chat — ask questions from your notes/syllabus/textbook"
     )
     if uploaded:
         index_documents(uploaded)
@@ -354,8 +396,8 @@ def render_sidebar():
 
 def render_welcome():
     """Render initial landing state before documents are uploaded."""
-    st.markdown("<h2 style='text-align: center; font-weight: 700; margin-bottom: 10px;'>📚 RSGSphere</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94A3B8; font-size: 18px; margin-bottom: 40px;'>Study Smart. Not Hard.</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; font-weight: 700; margin-bottom: 10px; color: #FFFFFF;'>📚 RSGSphere</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #A0A0A0; font-size: 18px; margin-bottom: 40px;'>Study Smart. Not Hard.</p>", unsafe_allow_html=True)
     
     c1, c2, c3 = st.columns(3)
     
@@ -363,7 +405,7 @@ def render_welcome():
         <div class="feature-card">
             <span class="feature-icon">📁</span>
             <div class="feature-title">1. Upload PDFs</div>
-            <div style="color: #94A3B8; font-size: 14px;">Add your study materials and syllabus in the sidebar.</div>
+            <div style="color: #A0A0A0; font-size: 14px;">Add your study materials and syllabus in the sidebar.</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -371,7 +413,7 @@ def render_welcome():
         <div class="feature-card">
             <span class="feature-icon">🤖</span>
             <div class="feature-title">2. AI Tutor</div>
-            <div style="color: #94A3B8; font-size: 14px;">Ask questions and get instant, context-aware answers.</div>
+            <div style="color: #A0A0A0; font-size: 14px;">Ask questions and get instant, context-aware answers.</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -379,22 +421,22 @@ def render_welcome():
         <div class="feature-card">
             <span class="feature-icon">🧠</span>
             <div class="feature-title">3. See ML Working</div>
-            <div style="color: #94A3B8; font-size: 14px;">Explore the dashboard to see how the models operate.</div>
+            <div style="color: #A0A0A0; font-size: 14px;">Explore the dashboard to see how the models operate.</div>
         </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("<div style='text-align: center; color: #64748B; margin-top: 20px;'>👈 Start by uploading your study material in the sidebar.</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; color: #666666; margin-top: 20px;'>👈 Start by uploading your study material in the sidebar.</div>", unsafe_allow_html=True)
 
 
 def intent_badge(intent: str):
     """Return emoji and color metadata for detected intent display."""
     badges = {
-        "fees": ("💰 FEES", "#f7d154"),
-        "exam": ("📚 EXAM", "#4776E6"),
-        "placement": ("🏢 PLACEMENT", "#00b09b"),
-        "hostel": ("🏠 HOSTEL", "#f7971e"),
-        "library": ("📖 LIBRARY", "#9b59b6"),
-        "general": ("ℹ️ GENERAL", "#95a5a6"),
+        "fees": ("💰 FEES", "#D79922"),
+        "exam": ("📚 EXAM", "#9B6E18"),
+        "placement": ("🏢 PLACEMENT", "#3D3D3D"),
+        "hostel": ("🏠 HOSTEL", "#D79922"),
+        "library": ("📖 LIBRARY", "#9B6E18"),
+        "general": ("ℹ️ GENERAL", "#666666"),
     }
     return badges.get(intent, badges["general"])
 

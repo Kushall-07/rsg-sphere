@@ -161,11 +161,11 @@ def _inject_layout_css() -> None:
             max-width: 100%;
         }
         [data-testid="stVerticalBlockBorderWrapper"] {
-            background: #1E293B;
-            border-color: #334155 !important;
+            background: #242424;
+            border-color: #3D3D3D !important;
         }
         .tutor-history-label {
-            color: #64748B;
+            color: #D79922;
             font-size: 0.68rem;
             font-weight: 600;
             letter-spacing: 0.06em;
@@ -173,20 +173,20 @@ def _inject_layout_css() -> None:
             margin: 12px 0 6px 2px;
         }
         [data-testid="stTextInput"] input {
-            background: #1E293B !important;
-            border: 1px solid #334155 !important;
+            background: #2D2D2D !important;
+            border: 1px solid #3D3D3D !important;
             border-radius: 24px !important;
-            color: #F1F5F9 !important;
+            color: #FFFFFF !important;
             padding: 12px 16px !important;
         }
         [data-testid="stTextInput"] input:focus {
-            border-color: #3B82F6 !important;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+            border-color: #D79922 !important;
+            box-shadow: 0 0 0 3px rgba(215, 153, 34, 0.2) !important;
         }
         .tutor-footnote {
             text-align: center;
             font-size: 12px;
-            color: #64748B;
+            color: #666666;
             margin-top: 6px;
         }
         </style>
@@ -210,7 +210,7 @@ def _format_message_html(content: str) -> str:
     safe = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", safe)
     safe = re.sub(
         r"`([^`]+)`",
-        r"<code style='background:#334155;padding:2px 6px;border-radius:4px;'>\1</code>",
+        r"<code style='background:#2D2D2D;padding:2px 6px;border-radius:4px;'>\1</code>",
         safe,
     )
     return safe
@@ -223,10 +223,10 @@ def _render_welcome(student: str) -> None:
         st.markdown(
             f"""
             <p style="text-align:center;font-size:48px;margin:24px 0 16px;">📚</p>
-            <h2 style="text-align:center;color:#F1F5F9;margin:0 0 8px;font-size:1.5rem;font-weight:600;">
+            <h2 style="text-align:center;color:#FFFFFF;margin:0 0 8px;font-size:1.5rem;font-weight:600;">
                 ✨ {greet}, {html_module.escape(student)}!
             </h2>
-            <p style="text-align:center;color:#94A3B8;margin:0;font-size:1rem;">
+            <p style="text-align:center;color:#A0A0A0;margin:0;font-size:1rem;">
                 Hello! Ask me anything about your subjects.
             </p>
             """,
@@ -295,11 +295,13 @@ def _render_sidebar() -> None:
         st.markdown("### 🎯 Exam Predictor")
 
         pyq_files = st.file_uploader(
-            "Upload PYQ Papers",
+            "📝 Upload Previous Year Papers",
             type=["pdf"],
             accept_multiple_files=True,
             key="pyq_uploader_sidebar",
-            label_visibility="collapsed"
+        )
+        st.caption(
+            "For Exam Predictor — ML will analyze patterns and predict important topics"
         )
 
         # BUTTON 1: Analyze Topics
