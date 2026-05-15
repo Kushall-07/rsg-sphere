@@ -150,27 +150,63 @@ def apply_theme():
             box-shadow: 0 0 0 1px #3B82F6;
         }
         
-        /* Tabs */
+        /* Tab Container */
         .stTabs [data-baseweb="tab-list"] {
             gap: 8px;
-            background-color: rgba(30, 41, 59, 0.5);
+            background: rgba(15, 23, 42, 0.8);
             padding: 6px;
             border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(51, 65, 85, 0.5);
             backdrop-filter: blur(10px);
+            width: fit-content;
         }
+
+        /* Individual Tab */
         .stTabs [data-baseweb="tab"] {
-            background-color: transparent;
+            height: 42px;
+            padding: 0 24px;
             border-radius: 12px;
-            padding: 8px 16px;
-            color: #94A3B8;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #64748B;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
             font-weight: 500;
+            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
         }
-        .stTabs [aria-selected="true"] {
-            background-color: #3B82F6 !important;
-            color: white !important;
-            border: none;
-            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+
+        /* Tab Hover */
+        .stTabs [data-baseweb="tab"]:hover {
+            background: rgba(37, 99, 235, 0.1);
+            color: #93C5FD;
+            border-color: rgba(37, 99, 235, 0.2);
+        }
+
+        /* Active Tab */
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            background: linear-gradient(
+                135deg, 
+                #2563EB 0%, 
+                #7C3AED 100%
+            );
+            color: #FFFFFF !important;
+            border-color: transparent;
+            box-shadow: 
+                0 4px 15px rgba(37, 99, 235, 0.4),
+                0 2px 4px rgba(0, 0, 0, 0.3);
+            font-weight: 600;
+        }
+
+        /* Remove default underline indicator */
+        .stTabs [data-baseweb="tab-highlight"] {
+            display: none;
+        }
+
+        /* Tab panel */
+        .stTabs [data-baseweb="tab-panel"] {
+            padding-top: 20px;
         }
         
         /* Sidebar */
@@ -593,7 +629,11 @@ def main():
     init_state()
     apply_theme()
     render_sidebar()
-    t1, t2, t3 = st.tabs(["💬 Smart Chat", "🤖 AI Tutor", "🧠 ML Training Dashboard"])
+    t1, t2, t3 = st.tabs([
+        "💬  Smart Chat",
+        "🤖  AI Tutor", 
+        "🧠  ML Dashboard"
+    ])
     with t1:
         tab_chat()
     with t2:

@@ -1,9 +1,9 @@
-"""Streamlit Tab 2: AI Tutor (Ollama) + Smart study panel + optional PYQ ML."""
+"""Streamlit Tab 2: AI Tutor with fixed sidebar + scrollable chat pane."""
 from __future__ import annotations
 
-import hashlib
 import html as html_module
 import io
+import re
 from datetime import datetime
 from typing import Callable, List, Optional
 
@@ -14,350 +14,481 @@ from doubt_solver.ollama_tutor import (
     build_ollama_messages,
     exam_hint_prompt,
     stream_tutor_reply,
-    suggest_followups,
 )
 from doubt_solver.session_utils import (
-    count_user_questions,
+    create_new_chat_session,
+    group_sessions_by_date,
+    init_chat_sessions,
     init_tutor_session_state,
     merge_topics_from_message,
-    session_duration_mins,
+    persist_current_session,
     sanitize_copy_id,
-    topic_list_for_panel,
+    select_chat_session,
     touch_session_start,
-    try_copy,
 )
+from utils.voice import get_voice_input
 
-SUBJECT_OPTIONS: List[tuple[str, str, str]] = [
-    ("General", "general", "🎓 Any subject"),
-    ("Mathematics", "maths", "📐 Maths"),
-    ("Physics", "physics", "⚛️ Physics"),
-    ("Computer Science", "cs", "💻 CS"),
-    ("Electronics", "electronics", "⚡ Electronics"),
-    ("Chemistry", "chem", "🔬 Chemistry"),
-    ("Machine Learning / AI", "ml", "📊 ML/AI"),
-    ("DBMS", "dbms", "🗄️ DBMS"),
-    ("Networking", "net", "🌐 Networks"),
-]
+def get_quick_topics_from_notes(notes_context):
+    """Extract key topics from uploaded notes"""
+    if not notes_context or len(notes_context) < 100:
+        return []
+    
+    import re
+    # Simple topic extraction:
+    # Find capitalized technical words/phrases
+    words = re.findall(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b', 
+                       notes_context[:3000])
+    # Count frequency
+    from collections import Counter
+    freq = Counter(words)
+    # Filter out common words
+    stopwords = {'The', 'This', 'That', 'These', 
+                 'When', 'Where', 'What', 'How',
+                 'With', 'From', 'Into', 'They',
+                 'There', 'Then', 'Here'}
+    topics = [w for w, c in freq.most_common(10) 
+              if w not in stopwords and len(w) > 3]
+    return topics[:4]  # Return max 4 topics
+
+def extract_topics_from_pyqs(pdf_files):
+    """
+    Extract important topics from PYQ PDFs
+    using TF-IDF and frequency analysis
+    """
+    import PyPDF2
+    import re
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from collections import Counter
+    
+    all_text = ""
+    for pdf_file in pdf_files:
+        try:
+            reader = PyPDF2.PdfReader(pdf_file)
+            for page in reader.pages:
+                all_text += page.extract_text() + " "
+        except:
+            continue
+    
+    if not all_text.strip():
+        return []
+    
+    # Extract noun phrases (capitalized terms)
+    words = re.findall(
+        r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b',
+        all_text)
+    
+    # Common words to ignore
+    ignore = {'What', 'Explain', 'Define', 
+              'Write', 'Describe', 'Compare',
+              'List', 'Discuss', 'With', 'The',
+              'This', 'That', 'How', 'When',
+              'Short', 'Long', 'Answer', 'Note',
+              'Question', 'Part', 'Section',
+              'Module', 'Unit', 'Mark', 'Marks'}
+    
+    # Count and filter
+    freq = Counter(words)
+    topics = [w for w, c in freq.most_common(20)
+              if w not in ignore 
+              and len(w) > 3
+              and c >= 1]
+    
+    return topics[:8]
+
+def predict_exam_questions(pdf_files):
+    """
+    Extract actual questions from PYQ PDFs
+    by finding question patterns
+    """
+    import PyPDF2
+    import re
+    
+    all_questions = []
+    
+    for pdf_file in pdf_files:
+        try:
+            reader = PyPDF2.PdfReader(pdf_file)
+            for page in reader.pages:
+                text = page.extract_text()
+                if not text:
+                    continue
+                    
+                # Find questions by patterns:
+                # Lines starting with number/letter
+                # Lines containing question words
+                lines = text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    # Pattern 1: numbered questions
+                    if re.match(
+                        r'^[0-9]+[\.\)]\s+[A-Z]',
+                        line) and len(line) > 20:
+                        # Clean the line
+                        q = re.sub(
+                            r'^[0-9]+[\.\)]\s+',
+                            '', line)
+                        if len(q) > 15:
+                            all_questions.append(q)
+                    # Pattern 2: starts with 
+                    # question words
+                    elif re.match(
+                        r'^(What|Explain|Define|'
+                        r'Describe|Compare|List|'
+                        r'Discuss|Write|How|Why)',
+                        line) and len(line) > 20:
+                        all_questions.append(line)
+        except:
+            continue
+    
+    # Remove duplicates, keep best ones
+    seen = set()
+    unique_questions = []
+    for q in all_questions:
+        q_clean = q[:50].lower()
+        if q_clean not in seen:
+            seen.add(q_clean)
+            unique_questions.append(q)
+    
+    return unique_questions[:6]
 
 
-def _chip_from_state() -> tuple[str, str]:
-    sid = str(st.session_state.get("tutor_subject_id", "general"))
-    for canon, cid, lbl in SUBJECT_OPTIONS:
-        if cid == sid:
-            return canon, lbl
-    return "General", "🎓 Any subject"
+def _inject_layout_css() -> None:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding-top: 1rem;
+            max-width: 100%;
+        }
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background: #1E293B;
+            border-color: #334155 !important;
+        }
+        .tutor-history-label {
+            color: #64748B;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin: 12px 0 6px 2px;
+        }
+        [data-testid="stTextInput"] input {
+            background: #1E293B !important;
+            border: 1px solid #334155 !important;
+            border-radius: 24px !important;
+            color: #F1F5F9 !important;
+            padding: 12px 16px !important;
+        }
+        [data-testid="stTextInput"] input:focus {
+            border-color: #3B82F6 !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+        }
+        .tutor-footnote {
+            text-align: center;
+            font-size: 12px;
+            color: #64748B;
+            margin-top: 6px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
-def _subject_label_plain() -> str:
-    canon, _ = _chip_from_state()
-    return canon
+def _time_greeting() -> str:
+    h = datetime.now().hour
+    if h < 12:
+        return "Good Morning"
+    if h < 17:
+        return "Good Afternoon"
+    return "Good Evening"
+
+
+def _format_message_html(content: str) -> str:
+    safe = html_module.escape(content or "")
+    safe = safe.replace("\n", "<br>")
+    safe = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", safe)
+    safe = re.sub(
+        r"`([^`]+)`",
+        r"<code style='background:#334155;padding:2px 6px;border-radius:4px;'>\1</code>",
+        safe,
+    )
+    return safe
+
+
+def _render_welcome(student: str) -> None:
+    greet = _time_greeting()
+    _, center, _ = st.columns([1, 2, 1])
+    with center:
+        st.markdown(
+            f"""
+            <p style="text-align:center;font-size:48px;margin:24px 0 16px;">📚</p>
+            <h2 style="text-align:center;color:#F1F5F9;margin:0 0 8px;font-size:1.5rem;font-weight:600;">
+                ✨ {greet}, {html_module.escape(student)}!
+            </h2>
+            <p style="text-align:center;color:#94A3B8;margin:0;font-size:1rem;">
+                Hello! Ask me anything about your subjects.
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _render_chat_messages(messages: List[dict]) -> None:
+    for msg in messages:
+        role = msg.get("role", "")
+        content = str(msg.get("content", ""))
+        stamp = msg.get("time", "")
+        if role == "user":
+            with st.chat_message("user"):
+                st.markdown(content)
+                if stamp:
+                    st.caption(stamp)
+        else:
+            with st.chat_message("assistant", avatar="📚"):
+                st.markdown(content)
+                if stamp:
+                    st.caption(stamp)
+
+
+def _render_chat_container(messages: List[dict], student: str) -> None:
+    with st.container(height=520, border=True):
+        if not messages:
+            _render_welcome(student)
+        else:
+            _render_chat_messages(messages)
+
+
+def _render_sidebar() -> None:
+    with st.container(border=True):
+        st.markdown("### 📚 RSGSphere")
+        if st.button("+ New Chat", key="tutor_new_chat_btn", use_container_width=True, type="primary"):
+            create_new_chat_session()
+            st.rerun()
+
+        for i, session in enumerate(st.session_state.tutor_sessions):
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                title_str = session.get("title") or "New chat"
+                if st.button(
+                    title_str[:25] + ("..." if len(title_str) > 25 else ""),
+                    key=f"hist_{i}",
+                    use_container_width=True
+                ):
+                    # Load this chat
+                    st.session_state.current_session_id = session["id"]
+                    st.session_state.tutor_messages = session.get("messages", [])
+                    st.rerun()
+            with col2:
+                if st.button(
+                    "🗑️",
+                    key=f"del_{i}",
+                    help="Delete chat"
+                ):
+                    st.session_state.tutor_sessions.pop(i)
+                    if st.session_state.current_session_id == session["id"]:
+                        st.session_state.tutor_messages = []
+                        st.session_state.current_session_id = None
+                    st.rerun()
+
+        st.markdown("---")
+        st.markdown("### 🎯 Exam Predictor")
+
+        pyq_files = st.file_uploader(
+            "Upload PYQ Papers",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="pyq_uploader_sidebar",
+            label_visibility="collapsed"
+        )
+
+        # BUTTON 1: Analyze Topics
+        if st.button("📚 Analyze Topics",
+                     key="analyze_topics_btn",
+                     use_container_width=True):
+            if pyq_files:
+                with st.spinner("Extracting topics..."):
+                    topics = extract_topics_from_pyqs(pyq_files)
+                    st.session_state.pyq_topics = topics
+                    st.session_state.pyq_questions = []
+                st.rerun()
+            else:
+                st.warning("Upload PYQ PDFs first")
+
+        # Show topics if available
+        if st.session_state.get("pyq_topics"):
+            st.markdown("**📌 Important Topics:**")
+            for i, topic in enumerate(st.session_state.pyq_topics[:8]):
+                if st.button(
+                    f"• {topic}",
+                    key=f"topic_{i}",
+                    use_container_width=True
+                ):
+                    # Send to Smart Chat (Tab 1) 
+                    # by storing in shared session state
+                    st.session_state.smart_chat_input = \
+                        f"Explain {topic} in detail with examples and key points"
+                    st.session_state.switch_to_tab = 0
+                    st.rerun()
+
+        st.markdown("")
+
+        # BUTTON 2: Predict Questions
+        if st.button("🎯 Predict Questions",
+                     key="predict_questions_btn",
+                     use_container_width=True):
+            if pyq_files:
+                with st.spinner("Predicting questions..."):
+                    questions = predict_exam_questions(pyq_files)
+                    st.session_state.pyq_questions = questions
+                    st.session_state.pyq_topics = st.session_state.get("pyq_topics", [])
+                st.rerun()
+            else:
+                st.warning("Upload PYQ PDFs first")
+
+        # Show predicted questions if available
+        if st.session_state.get("pyq_questions"):
+            st.markdown("**❓ Predicted Questions:**")
+            
+            # Show in expandable container
+            with st.expander("View Questions", expanded=True):
+                for i, question in enumerate(st.session_state.pyq_questions[:6]):
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        st.markdown(f"**Q{i+1}.** {question}")
+                    with col2:
+                        if st.button("→", key=f"q_send_{i}", help="Send to chat"):
+                            # Send question to AI Tutor chat
+                            st.session_state.tutor_input_temp = \
+                                f"Answer this exam question in detail: {question}"
+                            st.rerun()
+
+
+def _process_outgoing(
+    outgoing: str,
+    notes_ctx_fn: Callable[[str], str],
+    status_slot,
+) -> None:
+    touch_session_start()
+    stamp = datetime.now().strftime("%H:%M:%S")
+    hist = list(st.session_state["tutor_messages"])
+    ut = outgoing.strip()
+    st.session_state["tutor_messages"].append({"role": "user", "content": ut, "time": stamp})
+    msgs = build_ollama_messages(hist, ut, "General", notes_ctx_fn(ut))
+    accumulated = ""
+    try:
+        for token in stream_tutor_reply(msgs):
+            accumulated += token
+            status_slot.markdown(f"**RSGSphere is typing…**\n\n{accumulated}▎")
+        status_slot.empty()
+    except Exception as exc:
+        accumulated = (
+            "**Could not reach Ollama.** Start `ollama serve` and pull the model "
+            f"(`ollama pull llama3.2`).\n\n`{exc}`"
+        )
+        status_slot.empty()
+
+    astamp = datetime.now().strftime("%H:%M:%S")
+    st.session_state["tutor_messages"].append(
+        {"role": "assistant", "content": accumulated, "time": astamp, "feedback": None}
+    )
+    merge_topics_from_message("assistant", accumulated, st.session_state["tutor_topic_status"])
+    persist_current_session()
 
 
 def render_ai_tutor_tab(get_notes_context: Optional[Callable[[str], str]] = None):
-    """
-    Replace legacy Exam Predictor tab with conversational AI tutor + smart panel.
-
-    get_notes_context: optional callable(query)->str injecting Tab 1 indexed notes excerpts.
-    """
+    """Fixed sidebar + scrollable chat pane + pinned input bar."""
     init_tutor_session_state()
+    init_chat_sessions()
+    _inject_layout_css()
+
+    if "tutor_sessions" not in st.session_state:
+        st.session_state["tutor_sessions"] = []
+    if "tutor_messages" not in st.session_state:
+        st.session_state["tutor_messages"] = []
+    if "current_session_id" not in st.session_state:
+        st.session_state["current_session_id"] = None
+    if "last_input" not in st.session_state:
+        st.session_state.last_input = ""
+    if "tutor_input_temp" not in st.session_state:
+        st.session_state.tutor_input_temp = ""
+    if "pyq_topics" not in st.session_state:
+        st.session_state.pyq_topics = []
+    if "pyq_questions" not in st.session_state:
+        st.session_state.pyq_questions = []
+    if "smart_chat_input" not in st.session_state:
+        st.session_state.smart_chat_input = ""
+    st.session_state["tutor_sessions"] = st.session_state.get("chat_sessions", [])
 
     def default_notes(_q: str) -> str:
         return ""
 
     notes_ctx_fn = get_notes_context or default_notes
-
     pending_auto = str(st.session_state.pop("tutor_auto_send", "") or "").strip()
+    student = str(st.session_state.get("student_name", "Student"))
+    messages = list(st.session_state.get("tutor_messages", []))
+    send = False
 
-    st.subheader("🤖 AI Tutor")
+    side_col, main_col = st.columns([1, 3], gap="medium")
 
-    canon_focus, chip_lbl_top = _chip_from_state()
-    plain_subject = _subject_label_plain()
+    with side_col:
+        _render_sidebar()
 
-    left, right = st.columns([7, 3], gap="medium")
+    with main_col:
+        _render_chat_container(messages, student)
+        stream_status = st.empty()
 
-    with left:
+        if not messages:
+            notes_context = notes_ctx_fn("summary of topics") if notes_ctx_fn else ""
+            quick_topics = get_quick_topics_from_notes(notes_context)
+
+            if quick_topics:
+                st.markdown("**📚 From your uploaded notes:**")
+                cols = st.columns(len(quick_topics))
+                for i, topic in enumerate(quick_topics):
+                    with cols[i]:
+                        if st.button(topic, key=f"quick_topic_{i}", use_container_width=True):
+                            st.session_state["tutor_pending_send"] = f"Explain {topic} in detail with examples"
+                            st.rerun()
+
+        in_left, in_mid, in_right = st.columns([1, 10, 1])
+        with in_left:
+            if st.button("🎤", key="tutor_voice_btn", help="Voice input"):
+                text, err = get_voice_input()
+                if text:
+                    st.session_state["tutor_pending_send"] = text
+                    st.rerun()
+                elif err:
+                    st.toast(err)
+
+        with in_mid:
+            user_input = st.text_input(
+                "Ask anything",
+                placeholder="Ask anything...",
+                key="tutor_input_temp",
+                label_visibility="collapsed",
+            )
+
+        with in_right:
+            send = st.button("➤", key="tutor_send_btn", help="Send", type="primary")
+
         st.markdown(
-            """
-            <div style="padding:12px;background:rgba(255,255,255,0.06);border-radius:12px;margin-bottom:8px;">
-            Full-height chat powered by local <b>Ollama (llama3.2)</b>. No PDF required here — optional PYQs power the predictor in the panel.
-            </div>
-            """,
+            '<p class="tutor-footnote">RSGSphere uses llama3.2 locally · Inter</p>',
             unsafe_allow_html=True,
         )
 
-        chat_box = st.container(height=460, border=True)
-        with chat_box:
-            for i, msg in enumerate(st.session_state["tutor_messages"]):
-                if msg["role"] == "user":
-                    with st.chat_message("user", avatar=None):
-                        st.markdown(html_module.escape(msg["content"]))
-                        if msg.get("time"):
-                            st.caption(msg["time"])
-                else:
-                    content = msg.get("content", "") or ""
-                    with st.chat_message("assistant", avatar="🪐"):
-                        st.markdown("**RSGSphere**")
-                        st.markdown(content)
-                        st.caption(msg.get("time", ""))
-                        b1, b2, b3 = st.columns([1.2, 1, 6])
-                        with b1:
-                            if st.button("📋", key=f"cp_{i}", help="Copy response"):
-                                if try_copy(content):
-                                    st.toast("Copied to clipboard.")
-                                else:
-                                    st.session_state[f"_copy_fallback_{i}"] = True
-                        if st.session_state.get(f"_copy_fallback_{i}"):
-                            st.text_area(
-                                "Copy manually",
-                                content,
-                                height=min(280, max(100, len(content) // 3)),
-                                key=f"cf_{i}",
-                            )
-                        with b2:
-                            if st.button("👍", key=f"up_{i}"):
-                                msg["feedback"] = "up"
-                        with b3:
-                            if st.button("👎", key=f"dn_{i}"):
-                                msg["feedback"] = "down"
+    dispatch = str(st.session_state.pop("tutor_pending_send", "") or "").strip()
+    manual = pending_auto if pending_auto else user_input.strip()
+    
+    outgoing = ""
+    if dispatch:
+        outgoing = dispatch
+    elif send or (user_input and user_input.strip() != "" and st.session_state.get("last_input") != user_input) or pending_auto:
+        outgoing = manual
 
-            if not st.session_state["tutor_messages"]:
-                st.info("Ask any subject doubt — structuring, derivations, code, intuition, or exams.")
-
-        nonce = int(st.session_state["tutor_input_nonce"])
-        ta_key = f"tutor_txt_{nonce}"
-        if ta_key not in st.session_state:
-            st.session_state[ta_key] = st.session_state.pop("tutor_prefill_buffer", "")
-
-        user_in = st.text_area(
-            "Message",
-            height=140,
-            key=ta_key,
-            label_visibility="collapsed",
-            placeholder="Type your question (multiline). Replies support Markdown, code fences, and $math$.",
-        )
-
-        send = st.button("Send", type="primary", key="send_btn_tutor")
-
-        st.caption("Subject focus")
-        nrow = min(6, len(SUBJECT_OPTIONS))
-        rcols = st.columns(nrow)
-        first = SUBJECT_OPTIONS[:nrow]
-        rest = SUBJECT_OPTIONS[nrow:]
-        for j, (_, cid, lbl) in enumerate(first):
-            with rcols[j]:
-                if st.button(lbl, key=f"sj_{cid}"):
-                    st.session_state["tutor_subject_id"] = cid
-                    st.rerun()
-        if rest:
-            r2 = st.columns(len(rest))
-            for j, (_, cid, lbl) in enumerate(rest):
-                with r2[j]:
-                    if st.button(lbl, key=f"sj2_{cid}"):
-                        st.session_state["tutor_subject_id"] = cid
-                        st.rerun()
-
-        if canon_focus != "General":
-            st.caption(f"Focus: **{chip_lbl_top}** — {canon_focus}")
-
-        st.markdown("**Quick actions**")
-        aq1, aq2 = st.columns(2)
-        with aq1:
-            if st.button("💡 Explain this topic", key="qa_expl"):
-                st.session_state["tutor_quick_dispatch"] = (
-                    "Explain the topic we are discussing in simple terms first, then go deeper technically, "
-                    "with a real-world example and step-by-step notes."
-                )
-        with aq2:
-            if st.button("📝 Give practice problems", key="qa_prac"):
-                st.session_state["tutor_quick_dispatch"] = (
-                    "Give me scaffolded practice problems (easy → hard) with final answers in separate short hints."
-                )
-        aq3, aq4 = st.columns(2)
-        with aq3:
-            if st.button("🔄 Explain differently", key="qa_diff"):
-                st.session_state["tutor_quick_dispatch"] = (
-                    "Explain the same idea again using a different analogy and a shorter roadmap."
-                )
-        with aq4:
-            if st.button("📋 Summarize key points", key="qa_sum"):
-                st.session_state["tutor_quick_dispatch"] = "Summarize the key points from your last answer as a tight checklist."
-        if st.button("🎯 What might come in exam?", key="qa_exam"):
-            pyq = st.session_state.get("tutor_pyq_result") or {}
-            has_ml = bool(pyq and not pyq.get("error"))
-            st.session_state["tutor_quick_dispatch"] = exam_hint_prompt(has_ml, plain_subject)
-
-        dispatch = st.session_state.pop("tutor_quick_dispatch", None)
-
-        manual_text_raw = pending_auto.strip() if pending_auto else str(user_in or "").strip()
-
-        outgoing = dispatch.strip() if isinstance(dispatch, str) and dispatch.strip() else manual_text_raw
-
-        if send and manual_text_raw and not outgoing:
-            outgoing = manual_text_raw
-
-        if outgoing:
-
-            def _flush_turn(txt: str):
-                touch_session_start()
-                stamp = datetime.now().strftime("%H:%M:%S")
-                hist = list(st.session_state["tutor_messages"])
-                ut = txt.strip()
-                st.session_state["tutor_messages"].append({"role": "user", "content": ut, "time": stamp})
-                msgs = build_ollama_messages(hist, ut, plain_subject, notes_ctx_fn(ut))
-                stream_holder = chat_box.empty()
-                accumulated = ""
-                try:
-                    for token in stream_tutor_reply(msgs):
-                        accumulated += token
-                        stream_holder.markdown(accumulated + "▎")
-                    stream_holder.markdown(accumulated)
-                except Exception as exc:
-                    accumulated = (
-                        "**Could not reach Ollama.** Start `ollama serve` and ensure the model is pulled "
-                        f"(`ollama pull llama3.2`).\n\n`{exc}`"
-                    )
-                    stream_holder.markdown(accumulated)
-
-                astamp = datetime.now().strftime("%H:%M:%S")
-                st.session_state["tutor_messages"].append(
-                    {"role": "assistant", "content": accumulated, "time": astamp, "feedback": None}
-                )
-                merge_topics_from_message("assistant", accumulated, st.session_state["tutor_topic_status"])
-
-            nonce_out = nonce
-            st.session_state.pop("tutor_prefill_buffer", None)
-            st.session_state["tutor_input_nonce"] = nonce_out + 1
-            with st.spinner("Thinking…"):
-                _flush_turn(outgoing)
-            st.rerun()
-
-    with right:
-        st.markdown("### 🎯 Exam Topic Predictor")
-
-        uploads = st.file_uploader(
-            "Upload PYQ Papers (optional)",
-            type=["pdf"],
-            accept_multiple_files=True,
-            key="pyq_tutor_ml",
-            help="Adds ML-powered rankings in this panel.",
-        )
-
-        predictor_subject = st.text_input(
-            "Subject (optional, for your notes)",
-            value="",
-            key="predictor_subject_ml",
-            placeholder="e.g. Data Structures",
-        )
-
-        if uploads:
-            st.session_state["tutor_pyq_bytes"] = [(f.name, bytes(f.getbuffer())) for f in uploads]
-
-        st.caption("Upload previous-year papers to get TF-IDF + Random Forest topic rankings.")
-
-        if st.button("Predict Important Topics", key="predict_topics_btn_tutor"):
-            blobs = st.session_state.get("tutor_pyq_bytes") or []
-            if not blobs:
-                st.warning("Add at least one PDF first.")
-            else:
-                bio_list = []
-                for name, b in blobs:
-                    up = io.BytesIO(b)
-                    up.name = name
-                    bio_list.append(up)
-                with st.spinner("Analyzing papers — extracting questions and training RF…"):
-                    out = analyze_pyq_ml_pipeline(bio_list)
-                    if out.get("error"):
-                        st.error(out["error"])
-                    else:
-                        st.session_state["tutor_pyq_result"] = out
-                        sub = predictor_subject.strip() or "your subject"
-                        st.success(f"Analyzed — ranked topics for **{html_module.escape(sub)}**.")
-
-        res = st.session_state.get("tutor_pyq_result")
-        if res and not res.get("error"):
-            st.caption(f"Analyzed **{res.get('n_years', 0)}** years of papers")
-            st.caption(
-                f"Found **≈ {res.get('topics_found_note', 0)}** surfaced topics "
-                f"({res.get('n_questions_detected', 0)} question-like segments)."
-            )
-            for level, title in (
-                ("HIGH", "🔴 HIGH PRIORITY"),
-                ("MEDIUM", "🟡 MEDIUM PRIORITY"),
-                ("LOW", "🟢 LOW PRIORITY"),
-            ):
-                block = [r for r in res.get("ranked", []) if r.get("priority") == level][:12]
-                if not block:
-                    continue
-                st.markdown(f"**{title}**")
-                for row in block:
-                    label = row.get("topic", "")
-                    yrs = row.get("years_label", "")
-                    safe_key = f"tp_{level}_{sanitize_copy_id(label)[:28]}_{yrs}"
-                    if st.button(f"{label} — ({yrs})", key=safe_key):
-                        st.session_state["tutor_auto_send"] = (
-                            f'Explain "{label}" in depth with examples and practice problems suited for exams.'
-                        )
-                        st.rerun()
-
-        st.divider()
-
-        st.markdown("### 📚 Session Topics")
-        tl = topic_list_for_panel(st.session_state["tutor_topic_status"])
-        ongoing_label = plain_subject if canon_focus != "General" else None
-
-        if tl or ongoing_label:
-            st.caption("Topics discussed today:")
-            for t in tl:
-                st.markdown(f"- **{html_module.escape(t)}** ✅")
-            if ongoing_label and ongoing_label not in tl and ongoing_label != "General":
-                st.markdown(f"- **{html_module.escape(ongoing_label)}** *(focus area)*")
-        else:
-            st.caption("_Topics will populate as you chat._")
-
-        st.divider()
-
-        st.markdown("### 💡 Suggested Questions")
-        last_ai = ""
-        for m in reversed(st.session_state["tutor_messages"]):
-            if m.get("role") == "assistant":
-                last_ai = m.get("content", "")
-                break
-        for s in suggest_followups(last_ai, plain_subject):
-            h = hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()[:16]
-            if st.button((s[:90] + "…") if len(s) > 90 else s, key=f"sg_{h}"):
-                st.session_state["tutor_auto_send"] = s
-                st.rerun()
-
-        st.divider()
-
-        st.markdown("### 📊 Session Stats")
-        cq = count_user_questions()
-        nt = len(st.session_state["tutor_topic_status"])
-        mins = session_duration_mins()
-        st.metric("Questions asked", cq)
-        st.metric("Topics covered", nt)
-        st.metric("Session duration", f"{mins:.1f} mins")
-
-        st.divider()
-        c_clear, c_export = st.columns(2)
-        with c_clear:
-            if st.button("Clear Chat", key="clear_chat_btn_tutor"):
-                st.session_state["tutor_messages"] = []
-                st.session_state["tutor_topic_status"] = {}
-                st.session_state["tutor_session_start"] = None
-                st.session_state["tutor_input_nonce"] = int(st.session_state.get("tutor_input_nonce", 0)) + 1
-                st.rerun()
-        with c_export:
-            from utils.exporter import export_chat_to_pdf
-
-            if st.session_state["tutor_messages"]:
-                pdf = export_chat_to_pdf(
-                    st.session_state["tutor_messages"],
-                    title="RSGSphere AI Tutor Export",
-                )
-                st.download_button(
-                    "Export Chat",
-                    data=pdf,
-                    file_name="rsgsphere_ai_tutor_chat.pdf",
-                    mime="application/pdf",
-                )
+    if outgoing:
+        with st.spinner("Thinking…"):
+            _process_outgoing(outgoing, notes_ctx_fn, stream_status)
+        st.session_state.last_input = user_input
+        st.session_state["tutor_sessions"] = st.session_state.get("chat_sessions", [])
+        st.rerun()
