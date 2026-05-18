@@ -14,6 +14,14 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
 
+from doc_intelligence.predictor import DocumentPredictor
+from doc_intelligence.visualizer import (
+    load_final_metrics,
+    load_training_history,
+    plot_accuracy_curves,
+    plot_architecture,
+    plot_loss_curves,
+)
 from ml.intent_classifier import load_training_data, predict_intent, train_intent_models
 from doubt_solver import render_ai_tutor_tab
 from ml.visualizer import (
@@ -54,6 +62,17 @@ def get_reranker():
     return SVMReranker(model_path="models/reranker_svm.pkl")
 
 
+@st.cache_resource
+def load_doc_intelligence():
+    """Load pre-trained document intelligence model (inference only)."""
+    predictor = DocumentPredictor()
+    success = predictor.load(
+        "models/doc_intelligence.pth",
+        "models/feature_extractor.pkl",
+    )
+    return predictor if success else None
+
+
 def init_state():
     """Initialize Streamlit session-state keys used across tabs."""
     defaults = {
@@ -67,6 +86,8 @@ def init_state():
         "intent_training": None,
         "chat_input_nonce": 0,
         "cache_hits": 0,
+        "show_splash": True,
+        "doc_intel_result": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -309,45 +330,44 @@ def save_uploaded_file(uploaded):
 
 def index_documents(uploaded_files):
     """Extract, chunk, embed, and index uploaded documents in vector DB."""
+    from rag.indexing import index_pdfs_into_chroma
+
     embedder = get_embedder()
     retriever = get_retriever()
     with st.spinner("Indexing documents..."):
         for up in uploaded_files:
             if up.name in st.session_state["indexed_files"]:
                 continue
-            file_path = save_uploaded_file(up)
-            with open(file_path, "rb") as file:
-                pages = extract_text_from_pdf(file)
-            chunks = chunk_text(pages, up.name)
+            save_uploaded_file(up)
+            if hasattr(up, "seek"):
+                up.seek(0)
+            _ok, _count, names, chunks = index_pdfs_into_chroma(
+                [up],
+                embedder=embedder,
+                retriever=retriever,
+                skip_filenames=set(st.session_state["indexed_files"].keys()),
+            )
             if not chunks:
                 continue
-            embeddings = embedder.embed_texts([c["text"] for c in chunks])
-            retriever.index_documents(chunks, embeddings)
             st.session_state["all_chunks"].extend(chunks)
+            page_count = max((c.get("page_number", 0) for c in chunks), default=0)
             st.session_state["indexed_files"][up.name] = {
-                "pages": len(pages),
+                "pages": page_count,
                 "size": up.size,
                 "indexed": True,
             }
 
 
 def build_tutor_notes_context(query: str) -> str:
-    """Optional excerpts from indexed Tab 1 documents for tutor grounding."""
+    """Optional excerpts from indexed documents for tutor grounding."""
     if not st.session_state.get("indexed_files"):
         return ""
-    embedder = get_embedder()
-    retriever = get_retriever()
-    q_emb = embedder.embed_query(query)
-    sem = retriever.semantic_search(q_emb, k=5)
-    if not sem:
-        return ""
-    parts = []
-    for c in sem:
-        excerpt = (c.get("text") or "")[:900]
-        parts.append(
-            f"File `{c.get('filename')}`, page {c.get('page_number')}:\n{excerpt}"
-        )
-    return "\n\n".join(parts)
+    from rag.indexing import get_tutor_rag_context
+
+    context, _ = get_tutor_rag_context(
+        query, embedder=get_embedder(), retriever=get_retriever(), k=5
+    )
+    return context
 
 
 def render_sidebar():
@@ -365,6 +385,45 @@ def render_sidebar():
     )
     if uploaded:
         index_documents(uploaded)
+
+    predictor = load_doc_intelligence()
+    if predictor and uploaded:
+        for pdf_file in uploaded:
+            if hasattr(pdf_file, "seek"):
+                pdf_file.seek(0)
+            result = predictor.predict_pdf(pdf_file)
+            if result:
+                st.session_state.doc_intel_result = result
+                st.sidebar.markdown(
+                    """
+                    <div style="background:#2D2D2D;border-radius:10px;padding:12px;
+                        border:1px solid #3D3D3D;margin-top:8px;">
+                        <div style="color:#F5C518;font-size:12px;font-weight:600;
+                            margin-bottom:8px;">
+                            🧠 Document Intelligence
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                col1, col2 = st.sidebar.columns(2)
+                with col1:
+                    st.sidebar.metric(
+                        "Type",
+                        result["doc_type"]["label"],
+                        f"{result['doc_type']['confidence']:.0f}%",
+                    )
+                with col2:
+                    st.sidebar.metric(
+                        "Subject",
+                        result["subject"]["label"],
+                        f"{result['subject']['confidence']:.0f}%",
+                    )
+                st.sidebar.metric(
+                    "Difficulty",
+                    result["difficulty"]["label"],
+                    f"{result['difficulty']['confidence']:.0f}%",
+                )
 
     st.sidebar.markdown("### Uploaded Files")
     to_delete = None
@@ -665,16 +724,217 @@ def tab_training_dashboard():
         frame.columns = ["step", "ms"]
         st.plotly_chart(px.bar(frame, x="step", y="ms", title="Pipeline Timing Breakdown"), use_container_width=True)
 
+    st.markdown("---")
+    st.markdown("## 🧠 Section E: Document Intelligence Neural Network")
 
-def main():
-    """Run the full Streamlit application layout and all tabs."""
-    init_state()
-    apply_theme()
+    history = load_training_history()
+    metrics = load_final_metrics()
+
+    if not history or not metrics:
+        st.warning(
+            "Model not trained yet.\n\n"
+            "Run this command first:\n\n"
+            "`python train_doc_model.py`"
+        )
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("DocType Accuracy", f"{metrics['doc_type_acc']:.1f}%")
+        with col2:
+            st.metric("Subject Accuracy", f"{metrics['subject_acc']:.1f}%")
+        with col3:
+            st.metric("Difficulty Accuracy", f"{metrics['difficulty_acc']:.1f}%")
+        with col4:
+            st.metric("Total Parameters", f"{metrics['total_params']:,}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(plot_loss_curves(history), use_container_width=True)
+        with col2:
+            st.plotly_chart(plot_accuracy_curves(history), use_container_width=True)
+
+        st.markdown("### 🏗️ Network Architecture")
+        st.markdown(plot_architecture(), unsafe_allow_html=True)
+
+        st.markdown("### 🔍 Test the Model")
+        st.markdown("Upload any PDF to classify:")
+        test_pdf = st.file_uploader(
+            "Upload PDF for classification",
+            type=["pdf"],
+            key="doc_intel_test_pdf",
+        )
+        if test_pdf:
+            predictor = load_doc_intelligence()
+            if predictor:
+                with st.spinner("🧠 Classifying..."):
+                    result = predictor.predict_pdf(test_pdf)
+                if result:
+                    st.success("Classification Complete!")
+
+                    st.markdown("**Document Type:**")
+                    for label, conf in result["doc_type"]["all_probs"]:
+                        st.progress(conf / 100, text=f"{label}: {conf:.1f}%")
+
+                    st.markdown("**Subject:**")
+                    for label, conf in result["subject"]["all_probs"]:
+                        st.progress(conf / 100, text=f"{label}: {conf:.1f}%")
+
+                    st.markdown("**Difficulty:**")
+                    for label, conf in result["difficulty"]["all_probs"]:
+                        st.progress(conf / 100, text=f"{label}: {conf:.1f}%")
+
+
+def render_splash() -> None:
+    """Full-screen landing splash shown once per browser session."""
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="stSidebarNav"] { display: none !important; }
+        .stTabs { display: none !important; }
+        header { display: none !important; }
+        #MainMenu { visibility: hidden !important; }
+        footer { visibility: hidden !important; }
+        .block-container {
+            padding: 0 !important;
+            max-width: 100% !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+
+        .splash-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #1A1A1A;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(245, 197, 24, 0.4); }
+            70% { box-shadow: 0 0 0 30px rgba(245, 197, 24, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 197, 24, 0); }
+        }
+
+        .splash-logo {
+            font-size: 80px;
+            margin-bottom: 24px;
+            border-radius: 50%;
+            padding: 10px;
+            animation: scaleIn 0.5s ease-out, pulse 2s infinite 0.5s;
+        }
+
+        .splash-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 52px;
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -1px;
+            animation: slideUp 0.6s ease-out 0.2s both;
+            margin-bottom: 12px;
+        }
+
+        .splash-title span { color: #F5C518; }
+
+        .splash-tagline {
+            font-family: 'Inter', sans-serif;
+            font-size: 18px;
+            font-weight: 300;
+            color: #A0A0A0;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: slideUp 0.6s ease-out 0.4s both;
+            margin-bottom: 60px;
+        }
+
+        .splash-loader {
+            width: 200px;
+            height: 3px;
+            background: #2D2D2D;
+            border-radius: 3px;
+            overflow: hidden;
+            animation: slideUp 0.6s ease-out 0.6s both;
+        }
+
+        .splash-loader-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #F5C518, #E6B800);
+            border-radius: 3px;
+            animation: loading 2s ease-in-out forwards;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        .splash-powered {
+            position: absolute;
+            bottom: 40px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: #3D3D3D;
+            letter-spacing: 1px;
+            animation: slideUp 0.6s ease-out 0.8s both;
+        }
+
+        .splash-powered span { color: #666666; }
+        </style>
+
+        <div class="splash-container">
+            <div class="splash-logo">📚</div>
+            <div class="splash-title">RSG<span>Sphere</span></div>
+            <div class="splash-tagline">Study Smart · Not Hard</div>
+            <div class="splash-loader">
+                <div class="splash-loader-bar"></div>
+            </div>
+            <div class="splash-powered">
+                Powered by <span>llama3.2 · ChromaDB · scikit-learn</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    time.sleep(2)
+    st.session_state.show_splash = False
+    st.rerun()
+
+
+def render_main_app() -> None:
+    """Main application: sidebar and all tabs."""
     render_sidebar()
     t1, t2, t3 = st.tabs([
         "💬  Smart Chat",
-        "🤖  AI Tutor", 
-        "🧠  ML Dashboard"
+        "🤖  AI Tutor",
+        "🧠  ML Dashboard",
     ])
     with t1:
         tab_chat()
@@ -682,6 +942,20 @@ def main():
         render_ai_tutor_tab(get_notes_context=build_tutor_notes_context)
     with t3:
         tab_training_dashboard()
+
+
+def main():
+    """Run splash once per session, then the full application."""
+    init_state()
+    apply_theme()
+
+    if "show_splash" not in st.session_state:
+        st.session_state.show_splash = True
+
+    if st.session_state.show_splash:
+        render_splash()
+    else:
+        render_main_app()
 
 
 if __name__ == "__main__":

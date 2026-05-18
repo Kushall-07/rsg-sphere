@@ -33,8 +33,9 @@ def build_ollama_messages(
         sys += f"\n\nThe student selected subject focus: {subject_label}."
     if notes_context.strip():
         sys += (
-            "\n\nThe student has uploaded notes (Tab 1). When relevant, ground explanations in this material "
-            "and mention that you are drawing from their documents.\n\n---\nNOTES EXCERPT:\n"
+            "\n\nThe student has uploaded study materials indexed in ChromaDB. "
+            "When relevant, ground explanations in the provided context, explain step by step, "
+            "and reference the document when applicable.\n\n---\nDOCUMENT CONTEXT:\n"
             f"{notes_context.strip()[:12000]}\n---"
         )
     messages: List[Dict[str, str]] = [{"role": "system", "content": sys}]

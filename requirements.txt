@@ -10,7 +10,9 @@ SpeechRecognition
 pyaudio
 numpy
 torch
+torchvision
 scikit-learn
+textstat
 seaborn
 matplotlib
 plotly

@@ -22,6 +22,8 @@ def init_tutor_session_state() -> None:
         "tutor_topic_status": {},
         "tutor_input_nonce": 0,
         "tutor_auto_send": "",
+        "pending_tutor_message": None,
+        "doc_intel_result": None,
         "chat_sessions": [],
         "current_session_id": None,
         "student_name": "Student",

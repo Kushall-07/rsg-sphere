@@ -1,0 +1,48 @@
+{
+  "doc_type_classes": [
+    "textbook",
+    "question_paper",
+    "notes",
+    "lab_manual",
+    "research_paper",
+    "syllabus"
+  ],
+  "subject_classes": [
+    "computer_science",
+    "mathematics",
+    "physics",
+    "electronics",
+    "chemistry",
+    "mechanical",
+    "civil",
+    "general"
+  ],
+  "difficulty_classes": [
+    "beginner",
+    "intermediate",
+    "advanced"
+  ],
+  "doc_type_to_id": {
+    "lab_manual": 0,
+    "notes": 1,
+    "question_paper": 2,
+    "research_paper": 3,
+    "syllabus": 4,
+    "textbook": 5
+  },
+  "subject_to_id": {
+    "chemistry": 0,
+    "civil": 1,
+    "computer_science": 2,
+    "electronics": 3,
+    "general": 4,
+    "mathematics": 5,
+    "mechanical": 6,
+    "physics": 7
+  },
+  "difficulty_to_id": {
+    "advanced": 0,
+    "beginner": 1,
+    "intermediate": 2
+  }
+}
