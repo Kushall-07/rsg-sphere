@@ -14,12 +14,13 @@ def get_tutor_rag_context(
     embedder: Optional[EmbeddingService] = None,
     retriever: Optional[ChromaRetriever] = None,
     k: int = 5,
+    filenames: Optional[List[str]] = None,
 ) -> Tuple[str, str]:
     """Semantic search over indexed chunks; returns (context text, source line)."""
     embedder = embedder or EmbeddingService()
     retriever = retriever or ChromaRetriever()
     q_emb = embedder.embed_query(query)
-    hits = retriever.semantic_search(q_emb, k=k)
+    hits = retriever.semantic_search(q_emb, k=k, filenames=filenames)
     if not hits:
         return "", ""
 

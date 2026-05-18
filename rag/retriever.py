@@ -1,6 +1,6 @@
 """ChromaDB retrieval layer for semantic search."""
 from __future__ import annotations
-from typing import Dict, List
+from typing import Dict, List, Optional
 import chromadb
 from chromadb.config import Settings
 
@@ -20,9 +20,17 @@ class ChromaRetriever:
             metadatas=[{"filename": c["filename"], "page_number": c["page_number"]} for c in chunks],
             embeddings=embeddings.tolist(),
         )
-    def semantic_search(self, query_embedding, k: int = 10) -> List[Dict]:
+    def semantic_search(self, query_embedding, k: int = 10, filenames: Optional[List[str]] = None) -> List[Dict]:
         """Retrieve top-k semantically similar chunks with similarity scores."""
-        result = self.collection.query(query_embeddings=[query_embedding.tolist()], n_results=k)
+        query_kwargs = {"query_embeddings": [query_embedding.tolist()], "n_results": k}
+        if filenames is not None:
+            if len(filenames) == 0:
+                return []
+            elif len(filenames) == 1:
+                query_kwargs["where"] = {"filename": filenames[0]}
+            else:
+                query_kwargs["where"] = {"filename": {"$in": list(filenames)}}
+        result = self.collection.query(**query_kwargs)
         docs = result.get("documents", [[]])[0]
         metas = result.get("metadatas", [[]])[0]
         distances = result.get("distances", [[]])[0]

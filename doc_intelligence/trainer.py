@@ -137,6 +137,31 @@ class DocumentModelTrainer:
         print(f"Final Subject Acc: {self.history['subject_acc'][-1]:.1f}%")
         print(f"Final Difficulty Acc: {self.history['difficulty_acc'][-1]:.1f}%")
 
+        # Compute final confusion matrices on validation set
+        self.model.eval()
+        all_type_preds = []
+        all_sub_preds = []
+        all_diff_preds = []
+        all_type_targets = []
+        all_sub_targets = []
+        all_diff_targets = []
+
+        with torch.no_grad():
+            for X_val, y_type_val, y_sub_val, y_diff_val in val_loader:
+                out_type, out_sub, out_diff = self.model(X_val)
+                all_type_preds.extend(out_type.argmax(dim=1).cpu().numpy().tolist())
+                all_sub_preds.extend(out_sub.argmax(dim=1).cpu().numpy().tolist())
+                all_diff_preds.extend(out_diff.argmax(dim=1).cpu().numpy().tolist())
+
+                all_type_targets.extend(y_type_val.cpu().numpy().tolist())
+                all_sub_targets.extend(y_sub_val.cpu().numpy().tolist())
+                all_diff_targets.extend(y_diff_val.cpu().numpy().tolist())
+
+        from sklearn.metrics import confusion_matrix
+        self.history["doc_type_cm"] = confusion_matrix(all_type_targets, all_type_preds, labels=list(range(6))).tolist()
+        self.history["subject_cm"] = confusion_matrix(all_sub_targets, all_sub_preds, labels=list(range(8))).tolist()
+        self.history["difficulty_cm"] = confusion_matrix(all_diff_targets, all_diff_preds, labels=list(range(3))).tolist()
+
         return self.history
 
     def save_checkpoint(self, epoch: int):

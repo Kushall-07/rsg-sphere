@@ -455,50 +455,61 @@ def predict_exam_questions(pdf_files):
             seen.add(key)
             unique.append(q)
     
-    # If no questions found, generate
-    # intelligent ones from topic detection
-    if not unique:
-        # Detect subject from PDF
-        all_text = ""
-        for pdf_file in pdf_files:
-            try:
-                pdf_file.seek(0)
-                reader = PyPDF2.PdfReader(
-                    pdf_file)
-                for page in reader.pages:
-                    t = page.extract_text()
-                    if t:
-                        all_text += t
-            except:
-                pass
+    # Ensure there are at least 5 questions
+    if len(unique) < 5:
+        # Get subject from tutor_doc_intel_result
+        doc_intel = st.session_state.get("tutor_doc_intel_result") or {}
+        subject_label = doc_intel.get("subject", {}).get("label", "General").lower()
         
-        if 'computer vision' in \
-                all_text.lower():
-            unique = [
-                "What is computer vision and "
-                "how does it differ from "
-                "image processing?",
-                "Explain the concept of "
-                "photometric image formation "
-                "with a neat diagram.",
-                "Describe the industrial "
-                "applications of computer vision "
-                "with examples.",
-                "What are optical illusions? "
-                "Explain with examples from "
-                "the Muller-Lyer illusion.",
-                "Explain Marr's three levels "
-                "of analysis in computer vision.",
-                "What is the forward vs inverse "
-                "problem in computer vision?"
-            ]
+        physics_qs = [
+            "Explain the key physical principles and equations discussed in this material.",
+            "What are the core practical applications of these physics concepts in modern technology?",
+            "Describe a numerical problem or experiment that demonstrates this physical law.",
+            "Compare and contrast the different physical models and theories presented.",
+            "Derive or outline the mathematical proof for the fundamental equation in this system."
+        ]
+        chemistry_qs = [
+            "What are the primary chemical reactions, reagents, and mechanisms covered here?",
+            "Explain the industrial applications, synthesis steps, and safety protocols of these compounds.",
+            "Describe the molecular structure, bonding, and thermodynamic properties of the substances.",
+            "Differentiate between the key chemical compounds, isomers, or states discussed.",
+            "Formulate the chemical equations and calculate the equilibrium constants for this reaction."
+        ]
+        cs_qs = [
+            "Explain the primary algorithms, data structures, and complexity bounds of this computational method.",
+            "What are the core architectural designs, protocols, or design patterns used in this system?",
+            "Describe a practical software engineering scenario where this technology is applied.",
+            "Compare and contrast the different implementation strategies or programming paradigms discussed.",
+            "Outline the systematic workflow, pseudo-code, or optimization techniques for this system."
+        ]
+        general_qs = [
+            "What are the primary concepts, formulas, and definitions covered in this study material?",
+            "Explain the practical applications, real-world utility, and examples of these concepts.",
+            "Differentiate between the key theories, methodologies, or frameworks discussed.",
+            "Provide a step-by-step walkthrough or numerical problem illustrating this topic.",
+            "What are the most common exam questions expected from this chapter?"
+        ]
+        
+        fallbacks = general_qs
+        if "physics" in subject_label:
+            fallbacks = physics_qs
+        elif "chemistry" in subject_label:
+            fallbacks = chemistry_qs
+        elif "computer" in subject_label or "cs" in subject_label or "coding" in subject_label or "programming" in subject_label:
+            fallbacks = cs_qs
+            
+        for fq in fallbacks:
+            if len(unique) >= 5:
+                break
+            if fq not in unique:
+                unique.append(fq)
     
     return unique[:6]
 
 
 def _get_doc_intel_labels() -> tuple[str, str, str]:
-    """Document Intelligence labels from Tab 1 upload (if available)."""
-    doc_intel = st.session_state.get("doc_intel_result") or {}
+    """Document Intelligence labels from tutor upload (if available)."""
+    doc_intel = st.session_state.get("tutor_doc_intel_result") or {}
     doc_type = doc_intel.get("doc_type", {}).get("label", "Unknown")
     subject = doc_intel.get("subject", {}).get("label", "Unknown")
     difficulty = doc_intel.get("difficulty", {}).get("label", "Unknown")
@@ -543,8 +554,18 @@ def _send_to_tutor_chat(prompt: str) -> None:
     st.rerun()
 
 
+def load_tutor_doc_intelligence():
+    from doc_intelligence.predictor import DocumentPredictor
+    predictor = DocumentPredictor()
+    success = predictor.load(
+        "models/doc_intelligence.pth",
+        "models/feature_extractor.pkl",
+    )
+    return predictor if success else None
+
+
 def _render_doc_intel_card() -> None:
-    doc_intel = st.session_state.get("doc_intel_result")
+    doc_intel = st.session_state.get("tutor_doc_intel_result")
     if not doc_intel:
         return
     doc_type = doc_intel.get("doc_type", {}).get("label", "Unknown")
@@ -580,7 +601,7 @@ def index_pdfs_to_chromadb(pdf_files) -> tuple[bool, int]:
         if "all_chunks" not in st.session_state:
             st.session_state.all_chunks = []
 
-        skip = set(st.session_state.indexed_files.keys())
+        skip = {name for name, meta in st.session_state.indexed_files.items() if meta.get("source") == "exam_predictor"}
         to_index = [f for f in pdf_files if f.name not in skip]
         if not to_index:
             return True, 0
@@ -632,10 +653,11 @@ def _ensure_pyq_indexed(pyq_files) -> tuple[bool, int]:
 
 def _render_indexed_files_status() -> None:
     indexed = st.session_state.get("indexed_files") or {}
-    if not indexed:
+    tutor_files = {name: meta for name, meta in indexed.items() if meta.get("source") == "exam_predictor"}
+    if not tutor_files:
         return
     st.markdown("**📚 Indexed to Knowledge Base:**")
-    for fname in indexed:
+    for fname in tutor_files:
         st.markdown(f"✅ {fname}")
     st.caption("AI Tutor can now answer questions from these documents")
 
@@ -789,6 +811,9 @@ def _render_sidebar() -> None:
             accept_multiple_files=True,
             key="pyq_uploader_sidebar",
         )
+        if not pyq_files:
+            st.session_state.tutor_doc_intel_result = None
+            
         st.caption(
             "For Exam Predictor — ML will analyze patterns and predict important topics"
         )
@@ -800,36 +825,81 @@ def _render_sidebar() -> None:
                 st.success(f"✅ Indexed {chunk_count} chunks to knowledge base")
             elif ok:
                 st.caption("PDFs already in knowledge base")
+                
+            if not st.session_state.get("tutor_doc_intel_result"):
+                predictor = load_tutor_doc_intelligence()
+                if predictor:
+                    first_file = pyq_files[0]
+                    if hasattr(first_file, "seek"):
+                        first_file.seek(0)
+                    result = predictor.predict_pdf(first_file)
+                    if result:
+                        st.session_state.tutor_doc_intel_result = result
 
         _render_indexed_files_status()
 
         doc_type_label, subject_label, difficulty_label = _get_doc_intel_labels()
 
-        if st.button(
-            "📚 Analyze Topics",
-            key="analyze_topics_btn",
-            use_container_width=True,
-        ):
-            if pyq_files:
-                with st.spinner("Extracting topics..."):
-                    _ensure_pyq_indexed(pyq_files)
-                    _rewind_pyq_files(pyq_files)
-                    topics = extract_topics_from_pyqs(pyq_files)
-                    st.session_state.pyq_topics = topics
-                    st.session_state.pyq_questions = []
-                    st.session_state.pyq_topics_context = (
-                        f"{subject_label} | {difficulty_label}"
-                    )
-                st.rerun()
-            else:
-                st.warning("Upload PYQ PDFs first")
+        st.markdown("")
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button(
+                "📚 Analyze Topics",
+                key="analyze_topics_btn",
+                use_container_width=True,
+            ):
+                if pyq_files:
+                    with st.spinner("Extracting topics..."):
+                        _ensure_pyq_indexed(pyq_files)
+                        _rewind_pyq_files(pyq_files)
+                        topics = extract_topics_from_pyqs(pyq_files)
+                        st.session_state.pyq_topics = topics
+                        st.session_state.pyq_questions = []
+                        st.session_state.pyq_topics_context = (
+                            f"{subject_label} | {difficulty_label}"
+                        )
+                        
+                        # Run the ML pipeline to extract Random Forest feature importances
+                        _rewind_pyq_files(pyq_files)
+                        res = analyze_pyq_ml_pipeline(pyq_files)
+                        st.session_state.tutor_pyq_result = res
+                    st.rerun()
+                else:
+                    st.warning("Upload PYQ PDFs first")
+
+        with btn_col2:
+            if st.button(
+                "🎯 Predict Questions",
+                key="predict_questions_btn",
+                use_container_width=True,
+            ):
+                if pyq_files:
+                    with st.spinner("Predicting questions..."):
+                        _ensure_pyq_indexed(pyq_files)
+                        _rewind_pyq_files(pyq_files)
+                        questions = predict_exam_questions(pyq_files)
+                        # Guarantee at least 5 questions if possible
+                        if len(questions) < 5:
+                             questions.extend(["Describe core concepts in detail."] * (5 - len(questions)))
+                        st.session_state.pyq_questions = questions
+                        st.session_state.pyq_topics = st.session_state.get("pyq_topics", [])
+                        st.session_state.pyq_questions_context = subject_label
+                        
+                        # Also populate tutor_pyq_result if not already calculated
+                        if not st.session_state.get("tutor_pyq_result"):
+                            _rewind_pyq_files(pyq_files)
+                            res = analyze_pyq_ml_pipeline(pyq_files)
+                            st.session_state.tutor_pyq_result = res
+                    st.rerun()
+                else:
+                    st.warning("Upload PYQ PDFs first")
 
         if st.session_state.get("pyq_topics"):
             # Get subject and difficulty from 
             # document intelligence OR from 
             # the uploaded PDF filename
             doc_intel = st.session_state.get(
-                'doc_intel_result', None)
+                'tutor_doc_intel_result', None)
             
             if doc_intel:
                 subject = doc_intel.get(
@@ -867,23 +937,6 @@ def _render_sidebar() -> None:
 
         st.markdown("")
 
-        if st.button(
-            "🎯 Predict Questions",
-            key="predict_questions_btn",
-            use_container_width=True,
-        ):
-            if pyq_files:
-                with st.spinner("Predicting questions..."):
-                    _ensure_pyq_indexed(pyq_files)
-                    _rewind_pyq_files(pyq_files)
-                    questions = predict_exam_questions(pyq_files)
-                    st.session_state.pyq_questions = questions
-                    st.session_state.pyq_topics = st.session_state.get("pyq_topics", [])
-                    st.session_state.pyq_questions_context = subject_label
-                st.rerun()
-            else:
-                st.warning("Upload PYQ PDFs first")
-
         if st.session_state.get("pyq_questions"):
             q_ctx = st.session_state.get("pyq_questions_context", subject_label)
             st.markdown(f"**❓ Predicted Questions for {q_ctx}**")
@@ -891,8 +944,7 @@ def _render_sidebar() -> None:
             for i, question in enumerate(st.session_state.pyq_questions[:8]):
                 col1, col2 = st.columns([6, 1])
                 with col1:
-                    preview = question[:80] + ("..." if len(question) > 80 else "")
-                    st.markdown(f"**Q{i + 1}.** {preview}")
+                    st.markdown(f"**Q{i + 1}.** {question}")
                 with col2:
                     if st.button("→", key=f"q_btn_{i}", help="Ask AI Tutor"):
                         prompt = _build_question_prompt(
@@ -913,10 +965,11 @@ def _process_outgoing(
     st.session_state["tutor_messages"].append({"role": "user", "content": ut, "time": stamp})
     notes = notes_ctx_fn(ut)
     source_info = ""
-    if notes and st.session_state.get("indexed_files"):
+    tutor_files = {name: meta for name, meta in st.session_state.get("indexed_files", {}).items() if meta.get("source") == "exam_predictor"}
+    if notes and tutor_files:
         from rag.indexing import get_tutor_rag_context
 
-        _, source_info = get_tutor_rag_context(ut, k=3)
+        _, source_info = get_tutor_rag_context(ut, k=3, filenames=list(tutor_files.keys()))
 
     msgs = build_ollama_messages(hist, ut, "General", notes)
     accumulated = ""
