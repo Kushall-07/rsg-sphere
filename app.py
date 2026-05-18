@@ -273,7 +273,7 @@ def plot_model_comparison(results):
     fig = go.Figure()
     
     for i, model in enumerate(models):
-        values = [results[model][m] * 100 for m in metrics]
+        values = [results[model][m.lower()] * 100 for m in metrics]
         
         fig.add_trace(go.Bar(
             name=model,
@@ -285,7 +285,7 @@ def plot_model_comparison(results):
         ))
     
     # Highlight best model
-    best_model = max(results.keys(), key=lambda m: results[m]['F1'])
+    best_model = max(results.keys(), key=lambda m: results[m]['f1'])
     
     fig.update_layout(
         title=f'Model Comparison (Best: {best_model})',
@@ -1341,7 +1341,7 @@ def render_splash() -> None:
             align-items: center;
             justify-content: center;
             z-index: 9999;
-            animation: fadeIn 0.5s ease-in;
+            animation: fadeIn 0.2s ease-in;
         }
 
         @keyframes fadeIn {
@@ -1370,7 +1370,7 @@ def render_splash() -> None:
             margin-bottom: 24px;
             border-radius: 50%;
             padding: 10px;
-            animation: scaleIn 0.5s ease-out, pulse 2s infinite 0.5s;
+            animation: scaleIn 0.2s ease-out, pulse 1s infinite 0.2s;
         }
 
         .splash-title {
@@ -1379,7 +1379,7 @@ def render_splash() -> None:
             font-weight: 800;
             color: #FFFFFF;
             letter-spacing: -1px;
-            animation: slideUp 0.6s ease-out 0.2s both;
+            animation: slideUp 0.3s ease-out 0.1s both;
             margin-bottom: 12px;
         }
 
@@ -1392,7 +1392,7 @@ def render_splash() -> None:
             color: #A0A0A0;
             letter-spacing: 2px;
             text-transform: uppercase;
-            animation: slideUp 0.6s ease-out 0.4s both;
+            animation: slideUp 0.3s ease-out 0.2s both;
             margin-bottom: 60px;
         }
 
@@ -1402,14 +1402,14 @@ def render_splash() -> None:
             background: #2D2D2D;
             border-radius: 3px;
             overflow: hidden;
-            animation: slideUp 0.6s ease-out 0.6s both;
+            animation: slideUp 0.3s ease-out 0.3s both;
         }
 
         .splash-loader-bar {
             height: 100%;
             background: linear-gradient(90deg, #F5C518, #E6B800);
             border-radius: 3px;
-            animation: loading 2s ease-in-out forwards;
+            animation: loading 0.8s ease-in-out forwards;
         }
 
         @keyframes loading {
@@ -1424,7 +1424,7 @@ def render_splash() -> None:
             font-size: 13px;
             color: #3D3D3D;
             letter-spacing: 1px;
-            animation: slideUp 0.6s ease-out 0.8s both;
+            animation: slideUp 0.3s ease-out 0.4s both;
         }
 
         .splash-powered span { color: #666666; }
@@ -1444,7 +1444,7 @@ def render_splash() -> None:
         """,
         unsafe_allow_html=True,
     )
-    time.sleep(2)
+    time.sleep(0.8)
     st.session_state.show_splash = False
     st.rerun()
 
