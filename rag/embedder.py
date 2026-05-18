@@ -1,4 +1,4 @@
-"""Embedding helpers for RSGSphere RAG."""
+"""Embedding helpers for RAG-Sphere RAG."""
 from __future__ import annotations
 import numpy as np
 from sentence_transformers import SentenceTransformer

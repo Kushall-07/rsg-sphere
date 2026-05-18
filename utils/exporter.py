@@ -4,7 +4,7 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-def export_chat_to_pdf(messages, title: str = "RSGSphere Chat Export"):
+def export_chat_to_pdf(messages, title: str = "RAG-Sphere Chat Export"):
     """Convert session chat history into a downloadable PDF byte stream."""
     buffer = BytesIO(); pdf = canvas.Canvas(buffer, pagesize=A4); width, height = A4
     y = height - 40; pdf.setFont("Helvetica-Bold", 14); pdf.drawString(40, y, title); y -= 30

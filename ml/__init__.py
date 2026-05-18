@@ -1,1 +1,1 @@
-"""ML modules for RSGSphere."""
+"""ML modules for RAG-Sphere."""

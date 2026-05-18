@@ -1,1 +1,1 @@
-"""RAG package for RSGSphere."""
+"""RAG package for RAG-Sphere."""

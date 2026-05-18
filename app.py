@@ -1,4 +1,4 @@
-"""RSGSphere Streamlit app: RAG Smart Chat + AI Tutor (Ollama) + ML dashboard."""
+"""RAG-Sphere Streamlit app: RAG Smart Chat + AI Tutor (Ollama) + ML dashboard."""
 from __future__ import annotations
 
 import time
@@ -312,7 +312,7 @@ from utils.confidence import compute_confidence
 from utils.exporter import export_chat_to_pdf
 from utils.voice import speak_text
 
-st.set_page_config(page_title="RSGSphere", page_icon="📚", layout="wide")
+st.set_page_config(page_title="RAG-Sphere", page_icon="📚", layout="wide")
 
 
 @st.cache_resource
@@ -710,7 +710,7 @@ def build_tutor_notes_context(query: str) -> str:
 
 def render_sidebar():
     """Render sidebar with files list and session stats only."""
-    st.sidebar.title("📚 RSGSphere")
+    st.sidebar.title("📚 RAG-Sphere")
     st.sidebar.caption("Study Smart. Not Hard.")
 
     st.sidebar.markdown("### � Uploaded Documents")
@@ -775,13 +775,13 @@ def render_sidebar():
 
     if st.session_state["chat"]:
         pdf_bytes = export_chat_to_pdf(st.session_state["chat"])
-        st.sidebar.download_button("Export Chat as PDF", data=pdf_bytes, file_name="rsgsphere_chat.pdf")
+        st.sidebar.download_button("Export Chat as PDF", data=pdf_bytes, file_name="rag_sphere_chat.pdf")
 
 
 def render_welcome():
     """Render initial landing state before documents are uploaded."""
     # Hero section
-    st.markdown("<h2 style='text-align: center; font-weight: 700; margin-bottom: 8px; color: #FFFFFF;'>📚 RSGSphere</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; font-weight: 700; margin-bottom: 8px; color: #FFFFFF;'>📚 RAG-Sphere</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #A0A0A0; font-size: 18px; margin-bottom: 32px;'>Study Smart. Not Hard.</p>", unsafe_allow_html=True)
     
     # Upload card
@@ -1432,7 +1432,7 @@ def render_splash() -> None:
 
         <div class="splash-container">
             <div class="splash-logo">📚</div>
-            <div class="splash-title">RSG<span>Sphere</span></div>
+            <div class="splash-title">RAG<span>Sphere</span></div>
             <div class="splash-tagline">Study Smart · Not Hard</div>
             <div class="splash-loader">
                 <div class="splash-loader-bar"></div>

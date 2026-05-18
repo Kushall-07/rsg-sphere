@@ -749,7 +749,7 @@ def _render_chat_container(messages: List[dict], student: str) -> None:
 
 def _render_sidebar() -> None:
     with st.container(border=True):
-        st.markdown("### 📚 RSGSphere")
+        st.markdown("### 📚 RAG-Sphere")
         if st.button("+ New Chat", key="tutor_new_chat_btn", use_container_width=True, type="primary"):
             create_new_chat_session()
             st.rerun()
@@ -923,7 +923,7 @@ def _process_outgoing(
     try:
         for token in stream_tutor_reply(msgs):
             accumulated += token
-            status_slot.markdown(f"**RSGSphere is typing…**\n\n{accumulated}▎")
+            status_slot.markdown(f"**RAG-Sphere is typing…**\n\n{accumulated}▎")
         status_slot.empty()
     except Exception as exc:
         accumulated = (
@@ -1037,7 +1037,7 @@ def render_ai_tutor_tab(get_notes_context: Optional[Callable[[str], str]] = None
             send = st.button("➤", key="tutor_send_btn", help="Send", type="primary")
 
         st.markdown(
-            '<p class="tutor-footnote">RSGSphere uses llama3.2 locally · Inter</p>',
+            '<p class="tutor-footnote">RAG-Sphere uses llama3.2 locally · Inter</p>',
             unsafe_allow_html=True,
         )
 

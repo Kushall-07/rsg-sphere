@@ -6,7 +6,7 @@ from chromadb.config import Settings
 
 class ChromaRetriever:
     """Wrap ChromaDB operations for indexing and semantic retrieval."""
-    def __init__(self, db_path: str = "chroma_db", collection_name: str = "rsg_chunks"):
+    def __init__(self, db_path: str = "chroma_db", collection_name: str = "rag_chunks"):
         """Create or connect to persistent ChromaDB collection."""
         self.client = chromadb.PersistentClient(path=db_path, settings=Settings(anonymized_telemetry=False))
         self.collection = self.client.get_or_create_collection(collection_name)

@@ -1,1 +1,1 @@
-"""Utility modules for RSGSphere."""
+"""Utility modules for RAG-Sphere."""

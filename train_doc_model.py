@@ -1,5 +1,5 @@
 """
-RSGSphere — Document Intelligence Model
+RAG-Sphere — Document Intelligence Model
 Private Training Script
 
 Run this once to train and save the model.
@@ -11,7 +11,7 @@ import os
 
 def main():
     print("=" * 50)
-    print("RSGSphere Document Intelligence")
+    print("RAG-Sphere Document Intelligence")
     print("Neural Network Training Script")
     print("=" * 50)
 
